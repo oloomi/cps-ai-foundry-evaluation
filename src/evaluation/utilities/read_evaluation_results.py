@@ -1,8 +1,9 @@
+import argparse
 import os
 import json
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.machinelearningservices import AzureMachineLearningWorkspaces
-from storage_account_util import read_blob_from_uri
+from utilities.storage_account_io import read_blob_from_uri
 
 
 def get_workspace_specs():
@@ -26,15 +27,15 @@ def get_workspace_specs():
     }
 
 
-def get_evaluation_results(evaluation_response):
+def get_evaluation_results(evaluation_job_id):
     """
     Get evaluation results from AI Hub Project evaluation runs.
 
     Args:
-        evaluation_response: The response object from evaluations.create method.
+        evaluation_job_id (str): The evaluation job ID which is available in the evaluation job creation response.
 
     Returns:
-        Parsed JSON content of the evaluation results.
+        list: Parsed JSON content of the evaluation results.
     """
     try:
         # Get workspace specifications
@@ -43,7 +44,7 @@ def get_evaluation_results(evaluation_response):
         storage_account_name = workspace_specs["storage_account_name"]
 
         # Construct the results URI
-        job_id = evaluation_response.id
+        job_id = evaluation_job_id
         data_container_id = f"dcid.{job_id}"
         results_uri = f"https://{storage_account_name}.blob.core.windows.net/{workspace_id}-azureml/ExperimentRun/{data_container_id}/instance_results.jsonl"
 
@@ -71,3 +72,32 @@ def get_evaluation_results(evaluation_response):
     except Exception as e:
         print(f"Error processing evaluation response: {e}")
         return None
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Read cloud evaluation results."
+    )
+    parser.add_argument(
+        "--evaluation_job_response_file",
+        type=str,
+        required=True,
+        help="Path to the JSON file that contains the evaluation job ID.",
+    )
+    args = parser.parse_args()
+
+    with open(args.evaluation_job_response_file, "r") as f:
+        evaluation_response = json.load(f)
+
+    # Read the evaluation job ID from the provided file
+    evaluation_job_id = evaluation_response.get("job_id")
+
+    if evaluation_job_id:
+        results = get_evaluation_results(evaluation_job_id)
+        if results:
+            print("Evaluation results retrieved successfully.")
+            print(json.dumps(results, indent=2))
+        else:
+            print("No results found or an error occurred.")
+    else:
+        print("No evaluation job ID found in the provided file.")
